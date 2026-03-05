@@ -1,0 +1,2 @@
+# This project is a Node.js/TypeScript service.
+# Python packages are not required for runtime.
