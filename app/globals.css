@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F2F0EF;
+  --foreground: #4A4A4A;
+  --primary: #8E4585;
+  --primary-foreground: #ffffff;
+  --muted: #e8e4e3;
+  --muted-foreground: #996666;
+  --border: #d9d3d2;
+  --ring: #8E4585;
+  --radius: 0.5rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+}

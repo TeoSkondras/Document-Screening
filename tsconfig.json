@@ -20,6 +20,7 @@
     ],
     "baseUrl": ".",
     "paths": {
+      "@/*": ["./*"],
       "@shared/*": ["packages/shared/*"],
       "@scoring/*": ["packages/scoring/*"],
       "@queue/*": ["packages/queue/*"],

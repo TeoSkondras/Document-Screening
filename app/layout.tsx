@@ -1,15 +1,16 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Resume LLM Judge API',
-  description: 'Backend service for resume scoring'
+  title: 'Document Screening Assistant',
+  description: 'Score resumes against a rubric using AI judges',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="bg-parchment text-ink min-h-screen">{children}</body>
     </html>
   );
 }
