@@ -1,0 +1,31 @@
+EVA NOVAK
+eva.novak@email.com | Chicago, IL | github.com/evanovak
+
+SUMMARY
+Platform engineer with 5 years of experience building developer tooling, CI/CD pipelines, and internal platforms. Deep expertise in Kubernetes, observability, and infrastructure-as-code.
+
+EXPERIENCE
+
+Staff Platform Engineer — Cloudflare (2022–Present)
+- Architected a self-service deployment platform used by 400+ engineers, reducing deploy friction by 60%.
+- Built a custom Kubernetes operator in Go for managing ephemeral preview environments.
+- Designed and rolled out company-wide observability stack (OpenTelemetry, Grafana, Loki).
+- Drove adoption of policy-as-code with OPA/Rego, reducing production misconfigurations by 75%.
+
+Platform Engineer — Twilio (2020–2022)
+- Maintained Terraform modules for 50+ AWS accounts across 3 regions.
+- Built GitHub Actions CI/CD pipelines with automated canary deployments.
+- Reduced average build time from 18 min to 6 min through caching and parallelization.
+
+DevOps Engineer — ThoughtWorks (2019–2020)
+- Consulted for Fortune 500 clients on cloud migration and infrastructure modernization.
+- Led a Docker-to-Kubernetes migration for a financial services client.
+
+EDUCATION
+B.S. Computer Science, University of Illinois Urbana-Champaign (2019) — GPA 3.7
+
+SKILLS
+Languages: Go, Python, TypeScript, Bash
+Infrastructure: Kubernetes, Terraform, AWS, GCP, Pulumi
+Observability: OpenTelemetry, Grafana, Prometheus, Datadog
+Practices: GitOps, SRE, incident management, platform engineering

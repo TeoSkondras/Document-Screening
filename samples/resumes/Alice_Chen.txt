@@ -1,0 +1,30 @@
+ALICE CHEN
+alice.chen@email.com | San Francisco, CA | github.com/alicechen
+
+SUMMARY
+Senior backend engineer with 6 years of experience building distributed systems at scale. Strong track record shipping production services handling 50k+ RPS. Passionate about system design, observability, and mentoring junior engineers.
+
+EXPERIENCE
+
+Senior Software Engineer — Stripe (2022–Present)
+- Designed and implemented a new idempotency layer for the payments API, reducing duplicate charges by 98%.
+- Led migration of 12 microservices from EC2 to Kubernetes, cutting deployment time from 45 min to 8 min.
+- Owned on-call rotation for payment processing pipeline serving 50k RPS with 99.99% uptime SLA.
+- Mentored 3 junior engineers through Stripe's engineering ladder process.
+
+Software Engineer — Dropbox (2019–2022)
+- Built a real-time file sync conflict resolution service in Go, reducing sync errors by 40%.
+- Developed internal CLI tooling adopted by 200+ engineers for local development workflows.
+- Contributed to migration from Python 2 to Python 3 across 15 services.
+
+Software Engineering Intern — Google (Summer 2018)
+- Built a dashboard for monitoring ML pipeline health using React and BigQuery.
+
+EDUCATION
+B.S. Computer Science, UC Berkeley (2019) — GPA 3.8
+
+SKILLS
+Languages: Go, Python, TypeScript, Java
+Infrastructure: Kubernetes, Terraform, AWS, GCP, Docker
+Databases: PostgreSQL, Redis, DynamoDB
+Other: gRPC, Kafka, Datadog, CI/CD (GitHub Actions)

@@ -1,0 +1,31 @@
+CAROL OKONKWO
+carol.okonkwo@email.com | New York, NY | linkedin.com/in/carolokonkwo
+
+SUMMARY
+Full-stack engineer with 4 years of experience, specializing in TypeScript and cloud-native architecture. Strong communicator with experience leading cross-functional projects.
+
+EXPERIENCE
+
+Software Engineer II — Datadog (2022–Present)
+- Built a real-time log aggregation pipeline processing 2TB/day using Kafka and Flink.
+- Designed a multi-tenant RBAC system for the dashboards product, adopted by 500+ enterprise accounts.
+- Led a 3-person tiger team to reduce p99 API latency from 800ms to 120ms.
+
+Software Engineer — Shopify (2021–2022)
+- Developed storefront search features using Elasticsearch, improving search relevance scores by 25%.
+- Implemented A/B testing framework for checkout flow experiments.
+- Participated in on-call rotation for storefront availability (99.95% SLA).
+
+Software Engineering Fellow — Recurse Center (2020)
+- Pair-programmed daily on systems projects (built a BitTorrent client in Rust).
+- Presented a tech talk on distributed consensus algorithms.
+
+EDUCATION
+M.S. Computer Science, Columbia University (2020)
+B.S. Electrical Engineering, University of Lagos (2018)
+
+SKILLS
+Languages: TypeScript, Python, Rust, Go
+Infrastructure: AWS (ECS, Lambda, S3), Terraform, Docker
+Data: Kafka, Flink, Elasticsearch, PostgreSQL
+Practices: TDD, CI/CD, incident response, system design

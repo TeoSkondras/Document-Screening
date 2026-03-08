@@ -3,16 +3,48 @@ import { Readable } from 'stream';
 
 import { NextResponse } from 'next/server';
 
-import { getJobStatus } from '@queue/queue';
-import { fileExists } from '@storage/localTempStorage';
+import {
+  DOWNLOAD_RATE_LIMIT_MAX,
+  DOWNLOAD_RATE_LIMIT_WINDOW_SECONDS
+} from '@shared/constants';
+import { getJobAccessTokenFromRequest, getRequestIp, isRateLimited, isUuid } from '@shared/security';
+
+import { getJobStatus, getRedisConnection, hasJobAccess } from '@queue/queue';
+import { fileExists, isPathWithinJobRoot } from '@storage/localTempStorage';
 
 export const runtime = 'nodejs';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ jobId: string }> }
 ) {
   const { jobId } = await params;
+  if (!isUuid(jobId)) {
+    return NextResponse.json({ error: { message: 'Invalid job id.' } }, { status: 400 });
+  }
+
+  const accessToken = getJobAccessTokenFromRequest(request);
+  if (!accessToken) {
+    return NextResponse.json({ error: { message: 'Job not found.' } }, { status: 404 });
+  }
+
+  const redis = getRedisConnection();
+  const rateLimited = await isRateLimited({
+    redis,
+    bucket: 'download',
+    identifier: `${getRequestIp(request)}:${jobId}`,
+    limit: DOWNLOAD_RATE_LIMIT_MAX,
+    windowSeconds: DOWNLOAD_RATE_LIMIT_WINDOW_SECONDS
+  });
+
+  if (rateLimited) {
+    return NextResponse.json({ error: { message: 'Too many download requests.' } }, { status: 429 });
+  }
+
+  if (!(await hasJobAccess(jobId, accessToken))) {
+    return NextResponse.json({ error: { message: 'Job not found.' } }, { status: 404 });
+  }
+
   const jobStatus = await getJobStatus(jobId);
 
   if (!jobStatus) {
@@ -31,12 +63,18 @@ export async function GET(
     return NextResponse.json({ error: { message: 'Result file does not exist.' } }, { status: 404 });
   }
 
+  if (!isPathWithinJobRoot(jobId, jobStatus.resultPath)) {
+    return NextResponse.json({ error: { message: 'Invalid result path.' } }, { status: 500 });
+  }
+
   const fileStream = createReadStream(jobStatus.resultPath);
 
   return new NextResponse(Readable.toWeb(fileStream) as ReadableStream, {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': `attachment; filename="resume-judge-${jobId}.xlsx"`
+      'Content-Disposition': `attachment; filename="resume-judge-${jobId}.xlsx"`,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff'
     }
   });
 }

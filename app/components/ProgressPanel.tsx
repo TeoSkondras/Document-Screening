@@ -10,6 +10,7 @@ import { cn } from '@/app/lib/utils';
 
 interface Props {
   jobId: string;
+  accessToken: string;
   onResult: (result: JobStatusResponse) => void;
   latestResult: JobStatusResponse | null;
 }
@@ -21,7 +22,7 @@ const PHASE_LABELS: Record<string, string> = {
   upload:  'Finalizing',
 };
 
-export default function ProgressPanel({ jobId, onResult, latestResult }: Props) {
+export default function ProgressPanel({ jobId, accessToken, onResult, latestResult }: Props) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onResultRef = useRef(onResult);
   onResultRef.current = onResult;
@@ -32,7 +33,7 @@ export default function ProgressPanel({ jobId, onResult, latestResult }: Props) 
 
     async function poll() {
       try {
-        const result = await pollJob(jobId);
+        const result = await pollJob(jobId, accessToken);
         onResultRef.current(result);
         if (result.status === 'succeeded' || result.status === 'failed') {
           if (intervalRef.current) clearInterval(intervalRef.current);
@@ -45,12 +46,23 @@ export default function ProgressPanel({ jobId, onResult, latestResult }: Props) 
     poll();
     intervalRef.current = setInterval(poll, 1000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [jobId, latestResult?.status]);
+  }, [accessToken, jobId, latestResult?.status]);
 
   const status = latestResult?.status ?? 'queued';
   const progress = latestResult?.progress;
-  const pct = progress?.pct ?? 0;
+  const normalizedPct = progress?.pct ?? 0;
   const isRunning = status === 'running' || status === 'queued';
+  const displayPhase = status === 'succeeded' ? 'completed' : progress?.phase;
+  const displayMessage = status === 'succeeded'
+    ? 'Completed'
+    : status === 'failed'
+      ? latestResult?.error?.message ?? progress?.message
+      : progress?.message;
+  const progressValue = status === 'succeeded'
+    ? 100
+    : status === 'failed'
+      ? Math.max(4, Math.round(normalizedPct * 100))
+      : Math.max(4, Math.round(normalizedPct * 100));
 
   type BadgeVariant = 'queued' | 'running' | 'succeeded' | 'failed';
   const badgeVariant = (status as BadgeVariant) in { queued: 1, running: 1, succeeded: 1, failed: 1 }
@@ -62,20 +74,20 @@ export default function ProgressPanel({ jobId, onResult, latestResult }: Props) 
       <div className="flex items-center gap-3">
         <Badge variant={badgeVariant}>{status.toUpperCase()}</Badge>
         {isRunning && <Loader2 className="h-4 w-4 text-plum animate-spin" />}
-        {progress?.phase && (
+        {displayPhase && (
           <span className="text-sm text-ink">
-            {PHASE_LABELS[progress.phase] ?? progress.phase}
+            {displayPhase === 'completed' ? 'Completed' : (PHASE_LABELS[displayPhase] ?? displayPhase)}
           </span>
         )}
       </div>
 
       <Progress
-        value={Math.max(4, pct)}
+        value={progressValue}
         className={cn(status === 'failed' && '[&>div]:bg-red-500')}
       />
 
-      {progress?.message && (
-        <p className="text-sm text-mauve">{progress.message}</p>
+      {displayMessage && (
+        <p className="text-sm text-mauve">{displayMessage}</p>
       )}
 
       {latestResult?.error && (

@@ -4,6 +4,13 @@ import path from 'path';
 import { pipeline } from 'stream/promises';
 import unzipper from 'unzipper';
 
+import {
+  MAX_RESUMES_PER_JOB,
+  MAX_SINGLE_EXTRACTED_FILE_BYTES,
+  MAX_TOTAL_UNCOMPRESSED_RESUME_BYTES,
+  SUPPORTED_RESUME_EXTENSIONS
+} from '@shared/constants';
+
 function sanitizeZipPath(entryPath: string): string {
   return path
     .normalize(entryPath)
@@ -28,10 +35,26 @@ async function listFilesRecursive(dirPath: string): Promise<string[]> {
   return files;
 }
 
+function getUncompressedSize(file: unzipper.File): number | null {
+  const direct = (file as { uncompressedSize?: unknown }).uncompressedSize;
+  if (typeof direct === 'number' && Number.isFinite(direct) && direct >= 0) {
+    return direct;
+  }
+
+  const nested = (file as { vars?: { uncompressedSize?: unknown } }).vars?.uncompressedSize;
+  if (typeof nested === 'number' && Number.isFinite(nested) && nested >= 0) {
+    return nested;
+  }
+
+  return null;
+}
+
 export async function unzipResumes(zipPath: string, outputDir: string): Promise<string[]> {
   await fs.mkdir(outputDir, { recursive: true });
 
   const archive = await unzipper.Open.file(zipPath);
+  let supportedFileCount = 0;
+  let totalUncompressedBytes = 0;
 
   for (const file of archive.files) {
     if (file.type === 'Directory') {
@@ -41,6 +64,28 @@ export async function unzipResumes(zipPath: string, outputDir: string): Promise<
     const safeRelativePath = sanitizeZipPath(file.path);
     if (!safeRelativePath) {
       continue;
+    }
+
+    const ext = path.extname(safeRelativePath).toLowerCase();
+    if (!SUPPORTED_RESUME_EXTENSIONS.includes(ext as typeof SUPPORTED_RESUME_EXTENSIONS[number])) {
+      continue;
+    }
+
+    supportedFileCount += 1;
+    if (supportedFileCount > MAX_RESUMES_PER_JOB) {
+      throw new Error(`Resume archive exceeds the maximum of ${MAX_RESUMES_PER_JOB} supported files.`);
+    }
+
+    const uncompressedSize = getUncompressedSize(file);
+    if (uncompressedSize !== null) {
+      if (uncompressedSize > MAX_SINGLE_EXTRACTED_FILE_BYTES) {
+        throw new Error(`Resume file ${safeRelativePath} exceeds the maximum allowed size after extraction.`);
+      }
+
+      totalUncompressedBytes += uncompressedSize;
+      if (totalUncompressedBytes > MAX_TOTAL_UNCOMPRESSED_RESUME_BYTES) {
+        throw new Error('Resume archive exceeds the maximum total extracted size.');
+      }
     }
 
     const targetPath = path.join(outputDir, safeRelativePath);

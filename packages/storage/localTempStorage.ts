@@ -26,6 +26,14 @@ export async function ensureJobDirectories(jobId: string): Promise<JobDirectorie
   return dirs;
 }
 
+export function isPathWithinJobRoot(jobId: string, targetPath: string): boolean {
+  const { rootDir } = getJobDirectories(jobId);
+  const resolvedRoot = path.resolve(rootDir);
+  const resolvedTarget = path.resolve(targetPath);
+
+  return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`);
+}
+
 export async function saveFileFromFormData(file: File, targetPath: string): Promise<void> {
   const arrayBuffer = await file.arrayBuffer();
   await fs.mkdir(path.dirname(targetPath), { recursive: true });

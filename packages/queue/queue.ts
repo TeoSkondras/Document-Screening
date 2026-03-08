@@ -1,7 +1,8 @@
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 
-import { JOB_QUEUE_NAME, JOB_REDIS_KEY_PREFIX } from '@shared/constants';
+import { JOB_QUEUE_NAME, JOB_REDIS_KEY_PREFIX, JOB_STATUS_TTL_SECONDS } from '@shared/constants';
+import { hashJobAccessToken, safeEqualTokenHash } from '@shared/security';
 import type {
   CreateJobPayload,
   JobError,
@@ -25,6 +26,9 @@ export function getRedisConnection(): IORedis {
   if (!redisClient) {
     redisClient = new IORedis(getRedisUrl(), {
       maxRetriesPerRequest: null
+    });
+    redisClient.on('error', (err) => {
+      console.error('[Redis] Connection error:', err.message);
     });
   }
 
@@ -62,7 +66,7 @@ function normalizePct(value: number): number {
   return value;
 }
 
-export async function initJobStatus(jobId: string): Promise<void> {
+export async function initJobStatus(jobId: string, accessTokenHash: string): Promise<void> {
   const redis = getRedisConnection();
   const progress: JobProgress = {
     phase: 'extract',
@@ -73,6 +77,7 @@ export async function initJobStatus(jobId: string): Promise<void> {
   await redis.hset(jobKey(jobId), {
     jobId,
     status: 'queued',
+    access_token_hash: accessTokenHash,
     progress_phase: progress.phase,
     progress_pct: String(progress.pct),
     progress_message: progress.message,
@@ -82,6 +87,7 @@ export async function initJobStatus(jobId: string): Promise<void> {
     created_at: nowIso(),
     updated_at: nowIso()
   });
+  await redis.expire(jobKey(jobId), JOB_STATUS_TTL_SECONDS);
 }
 
 export async function setJobStatus(args: {
@@ -121,6 +127,18 @@ export async function setJobStatus(args: {
   }
 
   await redis.hset(jobKey(args.jobId), updates);
+  await redis.expire(jobKey(args.jobId), JOB_STATUS_TTL_SECONDS);
+}
+
+export async function hasJobAccess(jobId: string, accessToken: string): Promise<boolean> {
+  const redis = getRedisConnection();
+  const storedHash = await redis.hget(jobKey(jobId), 'access_token_hash');
+
+  if (!storedHash) {
+    return false;
+  }
+
+  return safeEqualTokenHash(storedHash, hashJobAccessToken(accessToken));
 }
 
 export async function getJobStatus(jobId: string): Promise<(JobStatusResponse & { resultPath?: string }) | null> {
@@ -145,8 +163,7 @@ export async function getJobStatus(jobId: string): Promise<(JobStatusResponse & 
     result: resultPath ? { downloadUrl: `/api/jobs/${jobId}/download` } : null,
     error: raw.error_message
       ? {
-          message: raw.error_message,
-          stack: raw.error_stack || undefined
+          message: raw.error_message
         }
       : null,
     resultPath

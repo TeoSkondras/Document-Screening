@@ -3,14 +3,37 @@ import path from 'path';
 
 import { NextResponse } from 'next/server';
 
-import { PROVIDER_ENV_KEY } from '@shared/constants';
-import { apiKeysSchema, judgesSchema } from '@shared/schemas';
+import {
+  MAX_RESUMES_ZIP_BYTES,
+  MAX_RUBRIC_XLSX_BYTES,
+  PROVIDER_ENV_KEY,
+  type ProviderEnvKeyName,
+  SUBMIT_RATE_LIMIT_MAX,
+  SUBMIT_RATE_LIMIT_WINDOW_SECONDS
+} from '@shared/constants';
+import { apiKeysSchema, judgesSchema, notesSchema } from '@shared/schemas';
+import { generateJobAccessToken, getRequestIp, hashJobAccessToken, isRateLimited } from '@shared/security';
 import type { CreateJobPayload } from '@shared/types';
 
-import { getQueue, initJobStatus } from '@queue/queue';
+import { getQueue, getRedisConnection, initJobStatus } from '@queue/queue';
 import { ensureJobDirectories, saveFileFromFormData } from '@storage/localTempStorage';
 
 export const runtime = 'nodejs';
+
+function jsonError(message: string, status: number, extra?: Record<string, unknown>) {
+  return NextResponse.json(
+    {
+      error: { message },
+      ...extra
+    },
+    {
+      status,
+      headers: {
+        'Cache-Control': 'no-store'
+      }
+    }
+  );
+}
 
 function parseJsonField<T>(label: string, value: FormDataEntryValue | null): T {
   if (typeof value !== 'string') {
@@ -24,8 +47,37 @@ function parseJsonField<T>(label: string, value: FormDataEntryValue | null): T {
   }
 }
 
+function assertUploadedFile(file: File, args: { label: string; expectedExtension: string; maxBytes: number }): void {
+  const normalizedName = file.name.trim().toLowerCase();
+  if (!normalizedName.endsWith(args.expectedExtension)) {
+    throw new Error(`${args.label} must be a ${args.expectedExtension} file.`);
+  }
+
+  if (file.size <= 0) {
+    throw new Error(`${args.label} must not be empty.`);
+  }
+
+  if (file.size > args.maxBytes) {
+    throw new Error(`${args.label} exceeds the maximum allowed size.`);
+  }
+}
+
 export async function POST(request: Request) {
   try {
+    const redis = getRedisConnection();
+    const clientIp = getRequestIp(request);
+    const rateLimited = await isRateLimited({
+      redis,
+      bucket: 'submit',
+      identifier: clientIp,
+      limit: SUBMIT_RATE_LIMIT_MAX,
+      windowSeconds: SUBMIT_RATE_LIMIT_WINDOW_SECONDS
+    });
+
+    if (rateLimited) {
+      return jsonError('Too many job submissions. Please wait and try again.', 429);
+    }
+
     const formData = await request.formData();
 
     const resumesZip = formData.get('resumesZip');
@@ -39,25 +91,38 @@ export async function POST(request: Request) {
     }
 
     if (!(rubricXlsx instanceof File)) {
-      return NextResponse.json({ error: { message: 'rubricXlsx file is required.' } }, { status: 400 });
+      return jsonError('rubricXlsx file is required.', 400);
     }
+
+    assertUploadedFile(resumesZip, {
+      label: 'resumesZip',
+      expectedExtension: '.zip',
+      maxBytes: MAX_RESUMES_ZIP_BYTES
+    });
+    assertUploadedFile(rubricXlsx, {
+      label: 'rubricXlsx',
+      expectedExtension: '.xlsx',
+      maxBytes: MAX_RUBRIC_XLSX_BYTES
+    });
 
     const judgesParsed = parseJsonField<unknown>('judges', judgesRaw);
     const judges = judgesSchema.parse(judgesParsed);
+    const sanitizedNotes = notesSchema.parse(typeof notes === 'string' ? notes : undefined);
 
     const providedApiKeys = apiKeysRaw
       ? apiKeysSchema.parse(parseJsonField<unknown>('apiKeys', apiKeysRaw))
       : {};
+    const allowServerSideProviderKeys = process.env.ALLOW_SERVER_SIDE_PROVIDER_KEYS === 'true';
 
     const requiredKeys = Array.from(
       new Set(judges.map((judge) => PROVIDER_ENV_KEY[judge.provider]))
-    );
+    ) as ProviderEnvKeyName[];
 
-    const resolvedApiKeys: Partial<Record<string, string>> = {};
+    const resolvedApiKeys: Partial<Record<ProviderEnvKeyName, string>> = {};
     const missingKeys: string[] = [];
 
     for (const keyName of requiredKeys) {
-      const value = providedApiKeys[keyName] || process.env[keyName];
+      const value = providedApiKeys[keyName] || (allowServerSideProviderKeys ? process.env[keyName] : undefined);
       if (value) {
         resolvedApiKeys[keyName] = value;
       } else {
@@ -66,18 +131,15 @@ export async function POST(request: Request) {
     }
 
     if (missingKeys.length > 0) {
-      return NextResponse.json(
-        {
-          error: {
-            message: `Missing required API key(s): ${missingKeys.join(', ')}`
-          },
-          requiredKeys
-        },
-        { status: 400 }
+      return jsonError(
+        `Missing required API key(s): ${missingKeys.join(', ')}`,
+        400,
+        { requiredKeys }
       );
     }
 
     const jobId = randomUUID();
+    const accessToken = generateJobAccessToken();
     const dirs = await ensureJobDirectories(jobId);
     const resumesZipPath = path.join(dirs.uploadsDir, 'resumes.zip');
     const rubricXlsxPath = path.join(dirs.uploadsDir, 'rubric.xlsx');
@@ -85,13 +147,13 @@ export async function POST(request: Request) {
     await saveFileFromFormData(resumesZip, resumesZipPath);
     await saveFileFromFormData(rubricXlsx, rubricXlsxPath);
 
-    await initJobStatus(jobId);
+    await initJobStatus(jobId, hashJobAccessToken(accessToken));
 
     const payload: CreateJobPayload = {
       jobId,
       resumesZipPath,
       rubricXlsxPath,
-      notes: typeof notes === 'string' ? notes : undefined,
+      notes: sanitizedNotes,
       judges,
       apiKeys: resolvedApiKeys
     };
@@ -101,12 +163,21 @@ export async function POST(request: Request) {
       attempts: 1
     });
 
-    return NextResponse.json({
-      jobId,
-      requiredKeys
-    });
+    return NextResponse.json(
+      {
+        jobId,
+        accessToken,
+        requiredKeys
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store'
+        }
+      }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create job.';
-    return NextResponse.json({ error: { message } }, { status: 400 });
+    const status = /maximum allowed size/i.test(message) ? 413 : 400;
+    return jsonError(message, status);
   }
 }

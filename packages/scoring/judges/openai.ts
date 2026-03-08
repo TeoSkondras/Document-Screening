@@ -56,8 +56,7 @@ export const openaiJudgeAdapter: JudgeAdapter = {
               }
             ]
           }
-        ],
-        temperature: 0
+        ]
       })
     });
 

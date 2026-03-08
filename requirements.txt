@@ -1,2 +1,3 @@
 # This project is a Node.js/TypeScript service.
-# Python packages are not required for runtime.
+# Python packages are not required for runtime or deployment.
+# Resume ZIP contents supported by the app: .pdf and .txt

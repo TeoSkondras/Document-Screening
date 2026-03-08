@@ -6,6 +6,7 @@ Production-oriented, one-day build backend for scoring resume batches with multi
 - BullMQ + Redis background processing
 - `/tmp` local temp storage for uploads/results
 - Excel output with one sheet per judge (+ `Average` when multiple judges)
+- Resume ZIP input supports `.pdf` and `.txt` files
 
 ## Folder Structure
 
@@ -45,6 +46,58 @@ packages/
 - Node.js 20+
 - Redis (local or Railway)
 
+## Redis Setup
+
+This app requires Redis for two things:
+
+- BullMQ background jobs
+- job status storage
+
+The only Redis-specific environment variable is:
+
+```bash
+REDIS_URL=redis://localhost:6379
+```
+
+Use any valid Redis connection string, including auth, TLS, or DB selection if needed:
+
+```bash
+redis://:password@host:6379/0
+rediss://:password@host:6379/0
+```
+
+Notes:
+- The API process and the worker process must use the same `REDIS_URL`.
+- No other Redis host/port/password env vars are used by this codebase.
+- A normal Redis instance is sufficient for local development.
+
+### Install Redis Locally
+
+Using Homebrew:
+
+```bash
+brew install redis
+brew services start redis
+```
+
+Verify Redis is running:
+
+```bash
+redis-cli ping
+```
+
+Expected response:
+
+```text
+PONG
+```
+
+Using Docker instead:
+
+```bash
+docker run -d --name document-screening-redis -p 6379:6379 redis:7
+```
+
 ## Environment
 
 Create `.env` (or use Railway vars):
@@ -52,12 +105,14 @@ Create `.env` (or use Railway vars):
 ```bash
 REDIS_URL=redis://localhost:6379
 
-# Optional fallback provider keys (can also be sent in POST /api/jobs apiKeys JSON)
+# Optional fallback provider keys
+# Disabled by default for security. Only used if ALLOW_SERVER_SIDE_PROVIDER_KEYS=true.
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 GEMINI_API_KEY=
 
 # Optional
+ALLOW_SERVER_SIDE_PROVIDER_KEYS=false
 WORKER_CONCURRENCY=2
 ```
 
@@ -65,6 +120,37 @@ Notes:
 - API keys are only required for providers selected in the job.
 - No key persistence on disk.
 - Keys are not logged by this service.
+- Server-side provider key fallback is disabled by default in deployed environments.
+- To let public job submissions use service-level provider keys, set `ALLOW_SERVER_SIDE_PROVIDER_KEYS=true`. This is higher risk because public users can spend your provider credits.
+- `npm run dev` loads `.env` automatically through Next.js.
+- `npm run worker` does not load `.env` automatically because it runs `tsx packages/queue/worker.ts`.
+
+## Security Model
+
+This app now enforces:
+
+- per-job access tokens for polling and downloads
+- Redis-backed rate limiting for submit, poll, and download endpoints
+- upload size limits
+- extracted archive size and file-count limits
+- rubric, notes, judge-count, and model-name limits
+- no stack traces in API responses
+
+Important:
+- `POST /api/jobs` returns an `accessToken`.
+- The client must keep that token and send it when polling job status or downloading results.
+- Anyone with both `jobId` and `accessToken` can access that job's status and output.
+
+Current limits:
+- resumes ZIP upload: 25 MB max
+- rubric XLSX upload: 2 MB max
+- extracted supported resume files: 100 max
+- extracted size per resume file: 10 MB max
+- total extracted resume bytes per job: 50 MB max
+- rubric criteria: 100 max
+- judges per job: 5 max
+- notes: 4,000 characters max
+- extracted resume text sent to model: 50,000 characters max per resume
 
 ## Install
 
@@ -73,6 +159,11 @@ npm install
 ```
 
 ## Run Locally
+
+1. Start Redis and confirm `redis-cli ping` returns `PONG`.
+2. Create `.env` with `REDIS_URL=redis://localhost:6379`.
+3. Start the API.
+4. Start the worker in a shell where `REDIS_URL` is exported.
 
 Terminal 1 (API):
 
@@ -83,6 +174,24 @@ npm run dev
 Terminal 2 (worker):
 
 ```bash
+set -a
+source .env
+set +a
+npm run worker
+```
+
+Alternative one-liner:
+
+```bash
+REDIS_URL=redis://localhost:6379 npm run worker
+```
+
+If you use provider API keys via `.env`, load them into the worker shell the same way:
+
+```bash
+set -a
+source .env
+set +a
 npm run worker
 ```
 
@@ -91,7 +200,7 @@ npm run worker
 ### 1) `POST /api/jobs`
 
 Multipart form-data fields:
-- `resumesZip` (file, required)
+- `resumesZip` (file, required). ZIP may contain `.pdf` and `.txt` resume files.
 - `rubricXlsx` (file, required)
 - `notes` (string, optional)
 - `judges` (stringified JSON array, required), e.g. `[{"provider":"openai","model":"gpt-5.2"}]`
@@ -100,10 +209,17 @@ Multipart form-data fields:
 Response:
 
 ```json
-{ "jobId": "<uuid>", "requiredKeys": ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] }
+{
+  "jobId": "<uuid>",
+  "accessToken": "<secret-token>",
+  "requiredKeys": ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
+}
 ```
 
 ### 2) `GET /api/jobs/:jobId`
+
+Required auth:
+- header: `x-job-token: <accessToken>`
 
 Response:
 
@@ -113,11 +229,14 @@ Response:
   "status": "queued|running|succeeded|failed",
   "progress": { "phase": "extract|judge|excel|upload", "pct": 0.0, "message": "..." },
   "result": { "downloadUrl": "/api/jobs/<uuid>/download" } | null,
-  "error": { "message": "...", "stack": "..." } | null
+  "error": { "message": "..." } | null
 }
 ```
 
 ### 3) `GET /api/jobs/:jobId/download`
+
+Required auth:
+- query param: `?token=<accessToken>` or header `x-job-token: <accessToken>`
 
 Streams generated XLSX with content type:
 `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
@@ -133,23 +252,39 @@ curl -X POST http://localhost:3000/api/jobs \
   -F 'apiKeys={"OPENAI_API_KEY":"'$OPENAI_API_KEY'","ANTHROPIC_API_KEY":"'$ANTHROPIC_API_KEY'"}'
 ```
 
+Sample assets included in this repo:
+- `samples/resumes.zip` - flat ZIP of `.txt` resume files
+- `samples/resumes-pdf.zip` - flat ZIP of `.pdf` resume files
+- `samples/rubric.xlsx` - example rubric workbook
+
+Example response:
+
+```json
+{
+  "jobId": "5f0c2c7b-3d63-46a4-9ff5-b0a79d7fd1c1",
+  "accessToken": "<secret-token>",
+  "requiredKeys": ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
+}
+```
+
 ## Example: Poll Job
 
 ```bash
-curl http://localhost:3000/api/jobs/<jobId>
+curl http://localhost:3000/api/jobs/<jobId> \
+  -H "x-job-token: <accessToken>"
 ```
 
 ## Example: Download Result
 
 ```bash
-curl -L http://localhost:3000/api/jobs/<jobId>/download -o results.xlsx
+curl -L "http://localhost:3000/api/jobs/<jobId>/download?token=<accessToken>" -o results.xlsx
 ```
 
 ## Scoring Pipeline
 
 1. Upload saved under `/tmp/resume-judge/<jobId>/uploads`
 2. Worker unzips resumes
-3. Text extraction (`.pdf`, `.docx`, `.txt`; unsupported skipped with warnings)
+3. Text extraction (`.pdf`, `.txt`; unsupported files skipped with warnings)
 4. Rubric parse from `Rubric` sheet if present, else first sheet
 5. For each `resume x judge`:
    - prompt model with rubric + notes + resume text
@@ -174,18 +309,128 @@ Case-insensitive columns expected:
 
 Internal `criterion_id` is generated as a stable slug.
 
-## Deployment Notes (Railway)
+## Deploy To Railway
 
-Single service pattern is supported:
-- API process: `npm run start` (or `npm run dev` for non-prod)
-- Worker process: `npm run worker`
+This app should be deployed to Railway as two services from the same repo:
 
-Typical production setup uses two Railway process types from same service codebase (web + worker) sharing the same `REDIS_URL`.
+- `web`: serves the Next.js UI and API
+- `worker`: processes BullMQ jobs
+
+Both services must share the same Redis instance and the same `REDIS_URL`.
+
+### What Is Already Configured In This Repo
+
+- `railway.json` configures Railpack builds and a web healthcheck at `/health`
+- `npm run start:web` starts the Next.js server
+- `npm run start:worker` starts the BullMQ worker
+- `app/health/route.ts` provides a Railway health endpoint
+
+### Railway Architecture
+
+Create one Railway project with:
+
+1. A `web` service from this repo
+2. A `worker` service from this repo
+3. A Redis service
+
+The `web` and `worker` services should both be connected to the same GitHub repo and branch.
+
+### Web Service Settings
+
+Set these in the Railway `web` service:
+
+- Root Directory: `.`
+- Build Command: `npm run build`
+- Start Command: `npm run start:web`
+
+The healthcheck path should be:
+
+```text
+/health
+```
+
+### Worker Service Settings
+
+Set these in the Railway `worker` service:
+
+- Root Directory: `.`
+- Build Command: `npm run build`
+- Start Command: `npm run start:worker`
+
+The worker does not need a public domain.
+
+### Redis Service
+
+Add a Redis service in the same Railway project.
+
+Then expose its connection string to both the `web` and `worker` services as:
+
+```bash
+REDIS_URL=<your-railway-redis-url>
+```
+
+Both services must use the same value.
+
+### Required Environment Variables
+
+Set these on both the `web` and `worker` services:
+
+```bash
+REDIS_URL=
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
+ALLOW_SERVER_SIDE_PROVIDER_KEYS=false
+WORKER_CONCURRENCY=2
+```
+
+Notes:
+- `REDIS_URL` is required.
+- Provider API keys are only required for providers you actually use.
+- If you send provider keys per job in the `POST /api/jobs` request, the service-level keys can be omitted.
+- Keep `ALLOW_SERVER_SIDE_PROVIDER_KEYS=false` unless you explicitly want the server to spend its own provider credits on behalf of users.
+- `WORKER_CONCURRENCY` only affects the worker service.
+
+### Deploy Steps
+
+1. Push this repo to GitHub.
+2. In Railway, create a new project.
+3. Add the `web` service from the GitHub repo.
+4. Add a second service from the same GitHub repo and name it `worker`.
+5. Add a Redis service.
+6. Set the start commands:
+   - `web`: `npm run start:web`
+   - `worker`: `npm run start:worker`
+7. Set `REDIS_URL` on both services using the Redis service connection string.
+8. Add any provider API keys you want available by default.
+9. Deploy both services.
+10. Open the `web` service domain and verify `/health` returns HTTP 200.
+
+### Pre-Deploy Checklist
+
+- `npm run typecheck` passes
+- `npm run build` passes
+- Redis is attached and `REDIS_URL` is present on both services
+- `web` and `worker` are on the same code branch
+- the `worker` service is deployed and running before you submit jobs
+
+### Operational Notes
+
+- Uploaded files and generated XLSX files are written to `/tmp`, which is ephemeral. This is acceptable for the current flow because the result is expected to be downloaded shortly after processing.
+- Resume archives should contain only `.pdf` and `.txt` files.
+- If the `worker` service is down, jobs will remain queued in Redis and the UI will not progress.
+- If `web` and `worker` do not share the same `REDIS_URL`, job status and queue processing will break.
+- The worker process does not need inbound HTTP traffic.
+- Polling and downloads require the per-job `accessToken` returned by `POST /api/jobs`.
+- Job metadata in Redis expires automatically after 24 hours.
+- The app rate-limits submit, poll, and download endpoints using Redis.
 
 ## Scripts
 
 - `npm run dev` - start Next.js dev server
 - `npm run build` - build app
 - `npm run start` - start production server
+- `npm run start:web` - Railway/web production start command
+- `npm run start:worker` - Railway/worker start command
 - `npm run worker` - start BullMQ worker
 - `npm run typecheck` - TypeScript check

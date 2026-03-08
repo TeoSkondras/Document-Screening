@@ -1,15 +1,32 @@
 import { z } from 'zod';
 
+import {
+  MAX_JUDGES,
+  MAX_MODEL_LENGTH,
+  MAX_NOTES_CHARS
+} from './constants';
+
 export const providerSchema = z.enum(['openai', 'anthropic', 'gemini']);
 
 export const judgeSpecSchema = z.object({
   provider: providerSchema,
-  model: z.string().min(1)
+  model: z
+    .string()
+    .trim()
+    .min(1)
+    .max(MAX_MODEL_LENGTH)
+    .regex(/^[A-Za-z0-9._:/-]+$/, 'Model name contains invalid characters.')
 });
 
-export const judgesSchema = z.array(judgeSpecSchema).min(1);
+export const judgesSchema = z.array(judgeSpecSchema).min(1).max(MAX_JUDGES);
 
-export const apiKeysSchema = z.record(z.string().min(1), z.string().min(1));
+export const apiKeysSchema = z.object({
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  GEMINI_API_KEY: z.string().min(1).optional()
+}).strict();
+
+export const notesSchema = z.string().trim().max(MAX_NOTES_CHARS).optional();
 
 export const rubricRowSchema = z.object({
   criterion: z.string().min(1),

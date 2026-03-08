@@ -58,7 +58,7 @@ export default function JudgeSelector({ judges, onChange, disabled }: Props) {
               list={`models-${judge.id}`}
               value={judge.model}
               disabled={disabled}
-              placeholder="Model name (e.g. gpt-4o)"
+              placeholder="Model name (e.g. gpt-5.4)"
               onChange={e => updateJudge(judge.id, { model: e.target.value })}
             />
             <datalist id={`models-${judge.id}`}>

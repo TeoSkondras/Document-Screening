@@ -26,6 +26,7 @@ export default function Home() {
   ]);
   const [requiredKeys, setRequiredKeys] = useState<string[]>([]);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [jobAccessToken, setJobAccessToken] = useState<string | null>(null);
   const [pollResult, setPollResult] = useState<JobStatusResponse | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -55,6 +56,7 @@ export default function Home() {
         apiKeys: keys,
       });
       setJobId(result.jobId);
+      setJobAccessToken(result.accessToken);
       setPhase('polling');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Submission failed.';
@@ -84,6 +86,7 @@ export default function Home() {
     setJudges([{ id: crypto.randomUUID(), provider: 'openai', model: '' }]);
     setRequiredKeys([]);
     setJobId(null);
+    setJobAccessToken(null);
     setPollResult(null);
     setSubmitError(null);
   }
@@ -114,7 +117,7 @@ export default function Home() {
               <Label>Resumes (ZIP)</Label>
               <UploadDropzone
                 accept=".zip"
-                label="Drag & drop a ZIP or click to browse"
+                label="Drag & drop a ZIP containing .pdf and .txt files"
                 value={resumesZip}
                 onChange={setResumesZip}
                 disabled={disabled}
@@ -177,25 +180,30 @@ export default function Home() {
       )}
 
       {/* Section 3: Progress */}
-      {(phase === 'polling' || phase === 'done') && jobId && (
+      {(phase === 'polling' || phase === 'done') && jobId && jobAccessToken && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>3. Progress</CardTitle>
           </CardHeader>
           <CardContent>
-            <ProgressPanel jobId={jobId} onResult={handlePollResult} latestResult={pollResult} />
+            <ProgressPanel
+              jobId={jobId}
+              accessToken={jobAccessToken}
+              onResult={handlePollResult}
+              latestResult={pollResult}
+            />
           </CardContent>
         </Card>
       )}
 
       {/* Section 4: Results */}
-      {phase === 'done' && pollResult?.status === 'succeeded' && jobId && (
+      {phase === 'done' && pollResult?.status === 'succeeded' && jobId && jobAccessToken && (
         <Card className="mb-6 border-rose">
           <CardHeader>
             <CardTitle>4. Results</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResultDownload jobId={jobId} />
+            <ResultDownload jobId={jobId} accessToken={jobAccessToken} />
           </CardContent>
         </Card>
       )}

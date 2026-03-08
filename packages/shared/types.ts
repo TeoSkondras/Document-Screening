@@ -1,3 +1,5 @@
+import type { ProviderEnvKeyName } from './constants';
+
 export type Provider = 'openai' | 'anthropic' | 'gemini';
 
 export interface JudgeSpec {
@@ -87,7 +89,7 @@ export interface CreateJobPayload {
   rubricXlsxPath: string;
   notes?: string;
   judges: JudgeSpec[];
-  apiKeys: Partial<Record<string, string>>;
+  apiKeys: Partial<Record<ProviderEnvKeyName, string>>;
 }
 
 export interface ParsedRubricRow {

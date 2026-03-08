@@ -1,0 +1,28 @@
+BOB MARTINEZ
+bob.martinez@email.com | Austin, TX
+
+OBJECTIVE
+Seeking a software engineering role where I can grow my skills and contribute to a team.
+
+EXPERIENCE
+
+Junior Developer — LocalStartup Inc. (2023–Present)
+- Helped build a CRUD web app using React and Node.js for managing customer orders.
+- Fixed bugs reported in Jira tickets and participated in code reviews.
+- Wrote unit tests for 3 API endpoints using Jest.
+
+IT Help Desk — University of Texas (2021–2023)
+- Assisted students and faculty with Wi-Fi, printer, and software installation issues.
+- Documented common troubleshooting steps in a shared wiki.
+
+EDUCATION
+B.S. Information Technology, University of Texas at Austin (2023) — GPA 3.2
+
+PROJECTS
+- Todo App: Built a to-do list app with React and Firebase (personal project).
+- Weather CLI: Python script that fetches weather data from OpenWeatherMap API.
+
+SKILLS
+Languages: JavaScript, Python (basic), HTML/CSS
+Frameworks: React, Express
+Tools: Git, VS Code, Jira

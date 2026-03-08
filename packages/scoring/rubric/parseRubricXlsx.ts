@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 
+import { MAX_RUBRIC_CRITERIA } from '@shared/constants';
 import { rubricRowSchema } from '@shared/schemas';
 import type { Rubric, RubricCriterion } from '@shared/types';
 
@@ -119,6 +120,10 @@ export async function parseRubricXlsx(filePath: string): Promise<Rubric> {
     });
 
     const criterionId = buildCriterionId(parsedRow.criterion, criteria.length, usedIds);
+
+    if (criteria.length >= MAX_RUBRIC_CRITERIA) {
+      throw new Error(`Rubric exceeds the maximum of ${MAX_RUBRIC_CRITERIA} criteria.`);
+    }
 
     criteria.push({
       criterionId,

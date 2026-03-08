@@ -3,14 +3,15 @@ import { Button } from '@/app/components/ui/button';
 
 interface Props {
   jobId: string;
+  accessToken: string;
 }
 
-export default function ResultDownload({ jobId }: Props) {
+export default function ResultDownload({ jobId, accessToken }: Props) {
   return (
     <div className="flex flex-col items-center gap-3 py-2">
       <p className="text-sm font-medium text-ink">Scoring complete!</p>
       <Button asChild size="lg">
-        <a href={`/api/jobs/${jobId}/download`} download>
+        <a href={`/api/jobs/${jobId}/download?token=${encodeURIComponent(accessToken)}`} download>
           <Download className="h-4 w-4" />
           Download Results (XLSX)
         </a>

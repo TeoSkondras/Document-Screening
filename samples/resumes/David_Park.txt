@@ -1,0 +1,26 @@
+DAVID PARK
+david.park@email.com | Seattle, WA
+
+EXPERIENCE
+
+Frontend Developer — Freelance (2022–Present)
+- Built marketing websites for 8 small business clients using WordPress and Squarespace.
+- Created a custom React landing page for a local restaurant.
+- Managed hosting and domain setup for clients.
+
+Barista / Shift Lead — Blue Bottle Coffee (2019–2022)
+- Trained 10+ new hires on POS systems and store procedures.
+- Promoted to shift lead within 6 months.
+
+EDUCATION
+Associate's Degree, Web Development — Seattle Central College (2022)
+Online Courses: freeCodeCamp (Responsive Web Design, JavaScript Algorithms)
+
+PROJECTS
+- Portfolio Site: Personal portfolio built with HTML, CSS, and vanilla JS.
+- Recipe Finder: React app that queries the Spoonacular API for recipes by ingredient.
+
+SKILLS
+Languages: HTML, CSS, JavaScript
+Frameworks: React (basic), WordPress
+Tools: Git, Figma, Netlify
