@@ -311,7 +311,7 @@ Internal `criterion_id` is generated as a stable slug.
 
 ## Deploy To Railway
 
-This app should be deployed to Railway as two services from the same repo:
+This app should be deployed to Railway as two services from the same repo using the root `Dockerfile`:
 
 - `web`: serves the Next.js UI and API
 - `worker`: processes BullMQ jobs
@@ -320,7 +320,8 @@ Both services must share the same Redis instance and the same `REDIS_URL`.
 
 ### What Is Already Configured In This Repo
 
-- `railway.json` configures Railpack builds and a web healthcheck at `/health`
+- `Dockerfile` builds a production image for Railway
+- `.dockerignore` keeps the Docker build context clean
 - `npm run start:web` starts the Next.js server
 - `npm run start:worker` starts the BullMQ worker
 - `app/health/route.ts` provides a Railway health endpoint
@@ -339,11 +340,16 @@ The `web` and `worker` services should both be connected to the same GitHub repo
 
 Set these in the Railway `web` service:
 
-- Root Directory: `.`
-- Build Command: `npm run build`
-- Start Command: `npm run start:web`
+- Source: GitHub repo
+- Builder: Dockerfile
+- Dockerfile path: `Dockerfile`
+- Start Command: leave blank to use the Dockerfile default, or set:
 
-The healthcheck path should be:
+```bash
+/bin/sh -lc 'npm run start:web -- --hostname 0.0.0.0 --port ${PORT:-3000}'
+```
+
+- Healthcheck path:
 
 ```text
 /health
@@ -353,9 +359,14 @@ The healthcheck path should be:
 
 Set these in the Railway `worker` service:
 
-- Root Directory: `.`
-- Build Command: `npm run build`
-- Start Command: `npm run start:worker`
+- Source: GitHub repo
+- Builder: Dockerfile
+- Dockerfile path: `Dockerfile`
+- Start Command:
+
+```bash
+npm run start:worker
+```
 
 The worker does not need a public domain.
 
@@ -398,18 +409,20 @@ Notes:
 3. Add the `web` service from the GitHub repo.
 4. Add a second service from the same GitHub repo and name it `worker`.
 5. Add a Redis service.
-6. Set the start commands:
-   - `web`: `npm run start:web`
+6. Make sure both services use the root `Dockerfile`.
+7. Set the start commands:
+   - `web`: leave default or set `/bin/sh -lc 'npm run start:web -- --hostname 0.0.0.0 --port ${PORT:-3000}'`
    - `worker`: `npm run start:worker`
-7. Set `REDIS_URL` on both services using the Redis service connection string.
-8. Add any provider API keys you want available by default.
-9. Deploy both services.
-10. Open the `web` service domain and verify `/health` returns HTTP 200.
+8. Set `REDIS_URL` on both services using the Redis service connection string.
+9. Add any provider API keys you want available by default.
+10. Deploy both services.
+11. Open the `web` service domain and verify `/health` returns HTTP 200.
 
 ### Pre-Deploy Checklist
 
 - `npm run typecheck` passes
 - `npm run build` passes
+- Docker image builds successfully
 - Redis is attached and `REDIS_URL` is present on both services
 - `web` and `worker` are on the same code branch
 - the `worker` service is deployed and running before you submit jobs
